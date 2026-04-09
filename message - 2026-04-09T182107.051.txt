@@ -1,0 +1,1628 @@
+--> Services
+
+local NoReference = cloneref or function(x)
+	return x
+end
+
+local UserInputService = NoReference(game:GetService("UserInputService"))
+local TweenService = NoReference(game:GetService("TweenService"))
+local TextService = NoReference(game:GetService("TextService"))
+local Players = NoReference(game:GetService("Players"))
+local RunService = NoReference(game:GetService("RunService"))
+local HttpService = NoReference(game:GetService("HttpService"))
+
+local GAME_ID = game.GameId
+
+--> Getcustomasset
+
+local Assets = {
+	["biggiehub/assets/help.png"] = "rbxassetid://11432859220",
+	["biggiehub/assets/maximize.png"] = "rbxassetid://11293980310",
+	["biggiehub/assets/unmaximize.png"] = "rbxassetid://11293978098",
+	["biggiehub/assets/minimize.png"] = "rbxassetid://11293980042",
+	["biggiehub/assets/close.png"] = "rbxassetid://11293981586",
+	["biggiehub/assets/user.png"] = "rbxassetid://11295273292",
+	["biggiehub/assets/square.png"] = "rbxassetid://14187686429",
+	["biggiehub/assets/controller.png"] = "rbxassetid://11326876816",
+	["biggiehub/assets/mouse.png"] = "rbxassetid://11432847583",
+	["biggiehub/assets/skull.png"] = "rbxassetid://12967641870",
+	["biggiehub/assets/group.png"] = "rbxassetid://11432832657",
+	["biggiehub/assets/code.png"] = "rbxassetid://11419714821",
+	["biggiehub/assets/config.png"] = "rbxassetid://12966842909",
+	["biggiehub/assets/biggie.png"] = "rbxassetid://121134173616665",
+	["biggiehub/assets/search.png"] = "rbxassetid://11293977875",
+	["biggiehub/assets/arrow.png"] = "rbxassetid://11293981980"
+}
+
+local Create = function(Class, Properties)
+    local Object = Instance.new(Class)
+
+    if Properties then
+        for Key, Value in Properties do
+           Object[Key] = Value 
+        end
+    end
+
+    return Object
+end
+
+local GetCustomAsset = (getgenv().__biggie and getgenv().__biggie.GetCustomAsset) or function(Asset)
+	if getcustomasset then
+		local Success, Result = pcall(function()
+			return getcustomasset(Asset)
+		end)
+		
+		if Success and Result and Result ~= "" then
+			return Result
+		end
+	end
+
+	return ""
+end
+
+--> Drag Module
+
+local Module = {}
+Module.__index = Module
+
+function Module:Drag(Data)
+	assert(Data["Interface"], "Missing interface")
+
+	Data = setmetatable(Data, Module)
+
+	Data.CanDrag = Data.CanDrag or true
+	Data.Speed = Data.Speed or 0
+
+	Data.Connections = {}
+
+	local Dragging, Start, Position = false, Vector2.zero, UDim2.new()
+
+	table.insert(Data.Connections, Data.Interface.InputBegan:Connect(function(Input)
+		if (Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch) and not UserInputService:GetFocusedTextBox() then
+			Dragging = true
+			Start = Vector2.new(Input.Position.X, Input.Position.Y)
+			Position = Data.Interface.Position
+
+			Data.Connections.InputChanged = Input.Changed:Connect(function()
+				if Input.UserInputState == Enum.UserInputState.End then
+					Dragging = false
+
+					Data.Connections.InputChanged:Disconnect()
+				end
+			end)
+		end
+	end))
+
+	table.insert(Data.Connections, UserInputService.InputChanged:Connect(function(Input)
+		if Data.CanDrag and Dragging and (Input.UserInputType == Enum.UserInputType.MouseMovement or Input.UserInputType == Enum.UserInputType.Touch) then
+			local Delta = Vector2.new(Input.Position.X, Input.Position.Y) - Start
+			local DragPosition = UDim2.new(
+				Position.X.Scale,     Position.X.Offset + Delta.X,
+				Position.Y.Scale,     Position.Y.Offset + Delta.Y
+			)
+
+			if Data.Speed > 0 then
+				TweenService:Create(Data.Interface, TweenInfo.new(Data.Speed), {
+					Position = DragPosition
+				}):Play()
+			else
+				Data.Interface.Position = DragPosition
+			end
+		end
+	end))
+	
+	return Data
+end
+
+--> Library
+
+local Library, Window, Tab, Button, Toggle, Input, Slider, Dropdown, Picker, Label, Section, Divider = {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}
+local Interface = game:GetObjects("rbxassetid://86461665688191")[1]
+
+local LocalPlayer = NoReference(Players.LocalPlayer)
+local Mouse = NoReference(LocalPlayer:GetMouse())
+local Mobile = LocalPlayer.PlayerGui:FindFirstChild("TouchGui") and true or false
+
+local CONSTANTS = {
+	KEYCODE_DEFAULT = Enum.KeyCode.RightShift,
+	ICON_DEFAULT = GetCustomAsset("biggiehub/assets/help.png"),
+	
+	UNMAXIMIZE_ICON = GetCustomAsset("biggiehub/assets/unmaximize.png"),
+	MAXIMIZE_ICON = GetCustomAsset("biggiehub/assets/maximize.png"),
+	
+	MAXIMIZE_DISABLED_COLOR = Color3.fromRGB(100, 100, 100),
+
+	TAB_COLOR = Color3.fromRGB(31, 31, 31),
+	BUTTON_COLOR = Color3.fromRGB(31, 31, 31),
+
+	HOVER_COLOR = Color3.fromRGB(28, 28, 28),
+	SELECTED_COLOR = Color3.fromRGB(38, 38, 38),
+
+	TEXT_COLOR = Color3.fromRGB(220, 220, 220),
+	DISABLED_TEXT_COLOR = Color3.fromRGB(150, 150, 150),
+
+	TOGGLE_COLOR = Color3.fromRGB(69, 120, 207),
+	
+	SLIDER_COLOR = Color3.fromRGB(69, 120, 207),
+	DISABLED_SLIDER_COLOR = Color3.fromRGB(39, 69, 117),
+	
+	OPTION_COLOR = Color3.fromRGB(25, 25, 25),
+	HOVER_OPTION_COLOR = Color3.fromRGB(20, 20, 20),
+	SELECTED_OPTION_COLOR = Color3.fromRGB(65, 65, 65),
+	
+	DRAGGING_NIL = 0,
+	DRAGGING_SATURATION_BRIGHTNESS = 1,
+	DRAGGING_HUE = 2
+}
+
+Library.CONSTANTS = CONSTANTS
+
+type WindowConfigurator = {
+	Name: string,
+	Parent: Instance,
+	AutoShow: boolean?,
+	MaximizeEnabled: boolean?,
+	KeyCode: Enum.KeyCode?,
+	AutoSave: boolean?
+}
+
+type TabConfigurator = {
+	Name: string,
+	Icon: string?
+}
+
+type ButtonConfigurator = {
+	Name: string,
+	Flag: string?,
+	Status: boolean?,
+	Callback: () -> nil
+}
+
+type ToggleConfigurator = {
+	Name: string,
+	Flag: string?,
+	Status: boolean?,
+	Value: boolean?,
+	Callback: () -> nil
+}
+
+type InputConfigurator = {
+	Name: string,
+	Flag: string?,
+	Status: boolean?,
+	Value: (string | number)?,
+	Numeric: boolean?,
+	Confirm: boolean?,
+	Callback: () -> nil
+}
+
+type SliderConfigurator = {
+	Name: string,
+	Flag: string?,
+	Status: boolean?,
+	Value: number,
+	Range: table,
+	Increment: number,
+	FireOnStepped: boolean?,
+	Callback: () -> nil
+}
+
+type DropdownConfigurator = {
+	Name: string,
+	Flag: string?,
+	Status: boolean?,
+	Options: table,
+	Multiselect: boolean?,
+	Callback: () -> nil
+}
+
+type PickerConfigurator = {
+	Name: string,
+	Flag: string?,
+	Status: boolean?,
+	Value: table?,
+	callback: () -> nil
+}
+
+type LabelConfigurator = {
+	Name: string
+}
+
+type SectionConfigurator = {
+	Name: string
+}
+
+type DividerConfigurator = {
+	Name: string?
+}
+
+function Class(Configuration: table, Class: table)
+	return setmetatable(Configuration, {__index = Class})
+end
+
+function Bounds(Left, Top, Right, Bottom)
+	return {
+		Left = Left,
+		Top = Top,
+		Right = Right,
+		Bottom = Bottom
+	}
+end
+
+function GetBounds(GuiObject: GuiObject)
+	return Bounds(
+		GuiObject.AbsolutePosition.X,
+		GuiObject.AbsolutePosition.Y,
+		GuiObject.AbsolutePosition.X + GuiObject.AbsoluteSize.X,
+		GuiObject.AbsolutePosition.Y + GuiObject.AbsoluteSize.Y
+	)
+end
+
+function InBounds(Position: Vector2, Bounds: table)
+	return Position.X >= Bounds.Left and Position.X <= Bounds.Right
+		and Position.Y >= Bounds.Top and Position.Y <= Bounds.Bottom
+end
+
+function Library:CreateWindow(Data: WindowConfigurator)
+	local Window = Class(Data, Window)
+	
+	Window.MaximizeEnabled = (Window.MaximizeEnabled == nil and false) or Window.MaximizeEnabled
+	Window.AutoShow = (Window.AutoShow == nil and true) or Window.AutoShow
+	Window.KeyCode = Window.KeyCode or CONSTANTS.KEYCODE_DEFAULT
+	Window.Interface = Interface:Clone()
+
+	Window.AutoSave = (Window.AutoSave == nil and true) or Window.AutoSave
+	Window.SaveFile = isfile("biggiehub/config/" .. GAME_ID .. ".json") and HttpService:JSONDecode(readfile("biggiehub/config/" .. GAME_ID .. ".json")) or {}
+
+	Window.Features = {}
+
+	Window.Connections = {}
+	Window.Open = false
+
+	Window.CurrentTab = nil
+	Window.Tabs = {}
+
+	Window.MobileButton = Create("TextButton", {
+		Name = "MobileButton",
+		Parent = Window.Interface,
+		Size = UDim2.new(0, 20, 0, 20),
+		Text = "Biggie Hub Show/Hide",
+		TextWrapped = true,
+		TextScaled = true,
+		Position = UDim2.new(1, -50, 1, -50)
+	})
+
+	Window.Initialized = false
+
+	--Window.Objects = isfile("biggiehub/config.json") and game:GetService("HttpService"):JSONDecode(readfile("biggiehub/config.json")) or {}
+
+	Window:Setup()
+
+	return Window
+end
+
+function Window:Setup()
+	self.Interface.Parent = self.Parent
+	self.Interface.Main.Title.Text = self.Name
+
+	self.Interface.Main.Close.Image = GetCustomAsset("biggiehub/assets/close.png")
+	self.Interface.Main.Maximize.Image = GetCustomAsset("biggiehub/assets/maximize.png")
+	self.Interface.Main.Minimize.Image = GetCustomAsset("biggiehub/assets/minimize.png")
+	self.Interface.Main.Content.SearchBar.Search.Image = GetCustomAsset("biggiehub/assets/search.png")
+
+	self.Interface.DisplayOrder = math.huge
+
+	if self.AutoShow then
+		self:Set(true)
+	end
+
+	if self.MobileButton then
+		table.insert(self.Connections, self.MobileButton.MouseButton1Click:Connect(function()
+			self:Set(not self.Open)
+		end))
+	end
+
+	table.insert(self.Connections, UserInputService.InputBegan:Connect(function(Input, ProcessedEvent)
+		if Input.KeyCode == self.KeyCode then
+			self:Set(not self.Open)
+		end
+	end))
+
+	table.insert(self.Connections, self.Interface.Main.Close.MouseButton1Click:Connect(function()
+		self:Set(false)
+	end))
+	
+	table.insert(self.Connections, self.Interface.Main.Maximize.MouseButton1Click:Connect(function()
+		self:SetMaximized(not self.Maximized)
+	end))
+	
+	table.insert(self.Connections, self.Interface.Main.Minimize.MouseButton1Click:Connect(function()
+		self:Set(false)
+	end))
+	
+	if not self.MaximizeEnabled then
+		TweenService:Create(self.Interface.Main.Maximize, TweenInfo.new(0.1), {
+			["ImageColor3"] = CONSTANTS.MAXIMIZE_DISABLED_COLOR
+		}):Play()
+	end
+
+	self.Drag = Module:Drag({
+		["Interface"] = self.Interface.Main,
+		["Speed"] = 0,
+		["CanDrag"] = true
+	})
+	
+	table.insert(self.Connections, self.Interface.Main.Content.SearchBar.TextBox:GetPropertyChangedSignal("Text"):Connect(function()
+		local Text = self.Interface.Main.Content.SearchBar.TextBox.Text
+
+		for _, Tab in self.Tabs do
+			if Tab.Interface:FindFirstChild("Content") == nil then
+				continue
+			end
+			
+			for _, Object in Tab.Interface.Content:GetChildren() do
+				if not Object:IsA("GuiObject") then continue end
+				
+				if string.len(Text) > 0 and not string.match(string.lower(Object.Name), string.lower(Text)) then
+					Object.Visible = false
+				else
+					Object.Visible = true
+				end
+			end
+		end
+	end))
+
+	self.Snowflakes = {}
+end
+
+function Window:MessageBox(Data: table)
+    local MessageBox = Interface.Examples.MessageBox:Clone()
+
+    MessageBox.Close.Image = GetCustomAsset("biggiehub/assets/close.png")
+    
+    MessageBox.Title.Text = Data.Title or "Title"
+    MessageBox.Text.Text = Data.Text or "Text"
+    
+    MessageBox.Parent = self.Interface
+    MessageBox.Visible = true
+    
+    self.Connections.MessageBox = MessageBox.Close.MouseButton1Click:Connect(function()
+        MessageBox:Destroy()
+
+        if self.Connections.MessageBox then
+            self.Connections.MessageBox:Disconnect()
+            self.Connections.MessageBox = nil
+        end
+    end)
+
+    Module:Drag({
+		["Interface"] = MessageBox,
+		["Speed"] = 0,
+		["CanDrag"] = true
+	})
+
+    return MessageBox
+end
+
+function Window:ClearSnow()
+	for _, Snowflake in self.Snowflakes do
+		Snowflake:Destroy()
+	end
+
+	self.Snowflakes = {}
+end
+
+function Window:SetSnowEffect(Mode: boolean)
+	if self.Connections.SnowEffect then
+		self.Connections.SnowEffect:Disconnect()
+		self.Connections.SnowEffect = nil
+	end
+
+	if Mode then
+		self:ClearSnow()
+
+		local LastSnow = tick()
+		self.Connections.SnowEffect = RunService.RenderStepped:Connect(function()
+			if (tick() - LastSnow) > 0.05 then
+				LastSnow = tick()
+
+				local Size = math.random(18, 20) / 10
+
+				local Snowflake = Instance.new("Frame")
+				Snowflake.Size = UDim2.new(0, Size, 0, Size)
+				Snowflake.BackgroundColor3 = Color3.new(1, 1, 1)
+				Snowflake.Position = UDim2.new(0, math.random(0, self.Interface.Main.AbsoluteSize.X), 0, -5)
+				Snowflake.BackgroundTransparency = math.random(0, 9) / 10
+				Snowflake.Parent = self.Interface.Main
+
+				local UICorner = Instance.new("UICorner")
+				UICorner.Parent = Snowflake
+				UICorner.CornerRadius = UDim.new(1, 0)
+
+				table.insert(self.Snowflakes, Snowflake)
+
+				local Tween = TweenService:Create(Snowflake, TweenInfo.new(math.random(20, 30) / 10, Enum.EasingStyle.Linear), {
+					["Position"] = UDim2.new(0, Snowflake.Position.X.Offset, 1, 5)
+				})
+
+				Tween:Play()
+				Tween.Completed:Connect(function()
+					Snowflake:Destroy()
+				end)
+			end
+		end)
+	else
+		self:ClearSnow()
+	end
+end
+
+function Window:Flush()
+	for Index, Connection in self.Connections do
+		Connection:Disconnect()
+	end
+
+	self.Interface:Destroy()
+
+	for Index, Tab in self.Tabs do
+		task.spawn(Tab.Flush, Tab)
+	end
+end
+
+function Window:SetMaximized(Mode: boolean)
+	if not self.MaximizeEnabled then return end
+	
+	self.Maximized = Mode
+	self.Drag.CanDrag = not Mode
+	self.Interface.Main.Maximize.Image = Mode and CONSTANTS.UNMAXIMIZE_ICON or CONSTANTS.MAXIMIZE_ICON
+	
+	TweenService:Create(self.Interface.Main, TweenInfo.new(0.1), {
+		["Size"] = Mode and UDim2.new(1, 0, 1, 0) or UDim2.new(0, 600, 0, 400),
+		["Position"] = Mode and UDim2.new(0.5, 0, 0.5, 0) or self.Interface.Main.Position
+	}):Play()
+end
+
+function Window:Set(Mode: boolean)
+	self.Open = Mode
+	self.Interface.Enabled = Mode
+end
+
+function Window:Switch(Tab: TabConfigurator)
+	if self.CurrentTab then
+		self.CurrentTab.Interface.Visible = false
+
+		TweenService:Create(self.CurrentTab.SideTab, TweenInfo.new(0.1), {
+			["BackgroundColor3"] = CONSTANTS.TAB_COLOR
+		}):Play()
+	end
+
+	self.CurrentTab = Tab
+	self.CurrentTab.Interface.Visible = true
+
+	TweenService:Create(self.CurrentTab.SideTab, TweenInfo.new(0.1), {
+		["BackgroundColor3"] = CONSTANTS.SELECTED_COLOR
+	}):Play()
+end
+
+function Window:CreateTab(Data: TabConfigurator)
+	local Tab = Class(Data, Tab)
+
+	Tab.Window = self
+	Tab.Icon = Tab.Icon or CONSTANTS.ICON_DEFAULT
+	Tab.Visible = (Tab.Visible == nil and true) or Tab.Visible
+
+	Tab.Interface = self.Interface.Examples.Tab:Clone()
+	Tab.SideTab = self.Interface.Examples.TabButton:Clone()
+
+	Tab.Connections = {}
+	Tab.Content = {}
+
+	Tab:Setup()
+
+	if not self.CurrentTab then
+		self:Switch(Tab)
+	end
+
+	self.Tabs[Tab.Name] = Tab
+
+	table.insert(Tab.Connections, Tab.SideTab.MouseEnter:Connect(function()
+		if self.CurrentTab == Tab then return end
+
+		TweenService:Create(Tab.SideTab, TweenInfo.new(0.1), {
+			["BackgroundColor3"] = CONSTANTS.HOVER_COLOR
+		}):Play()
+	end))
+
+	table.insert(Tab.Connections, Tab.SideTab.MouseLeave:Connect(function()
+		if self.CurrentTab == Tab then return end
+
+		TweenService:Create(Tab.SideTab, TweenInfo.new(0.1), {
+			["BackgroundColor3"] = CONSTANTS.TAB_COLOR
+		}):Play()
+	end))
+
+	return Tab
+end
+
+function Window:Save()
+	if not self.Initialized then
+		return
+	end
+
+	local Data = {}
+
+	for Flag, Feature in self.Features do
+		Data[Flag] = Feature:Get()
+	end
+
+	task.spawn(pcall, writefile, "biggiehub/config/" .. GAME_ID .. ".json", HttpService:JSONEncode(Data))
+end
+
+function Window:Load(Ignore)
+    Ignore = Ignore or {}
+	self.SaveFile = isfile("biggiehub/config/" .. GAME_ID .. ".json") and HttpService:JSONDecode(readfile("biggiehub/config/" .. GAME_ID .. ".json")) or {}
+
+	for Flag, Data in self.SaveFile do
+		if self.Features[Flag] and not table.find(Ignore, Flag) then
+			self.Features[Flag]:Set(Data)
+		end
+	end
+
+	self.Initialized = true
+end
+
+function Tab:Setup()
+	self.Interface.Name = self.Name
+	self.Interface.Parent = self.Window.Interface.Main.Content.Tabs
+
+	self.SideTab.Name = self.Name
+	self.SideTab.Text.Text = self.Name
+
+	self.SideTab.Icon.Image = self.Icon
+	self.SideTab.Parent = self.Window.Interface.Main.Content.Sidebar.Content
+
+	self.SideTab.Visible = true
+
+	table.insert(self.Connections, self.SideTab.MouseButton1Click:Connect(function()
+		self.Window:Switch(self)
+	end))
+end
+
+function Tab:SetTheme(Asset: string, Properties: table?)
+	local Theme = Instance.new("ImageLabel", self.Interface)
+	Theme.BackgroundTransparency = 1
+	Theme.Image = Asset
+	Theme.Size = UDim2.new(1, 0, 1, 0)
+	Theme.Position = UDim2.new(0, 0, 0, 0)
+	
+	self.Interface.Content.Parent = Theme
+	
+	if Properties then
+		for Key, Value in Properties do
+			Theme[Key] = Value
+		end
+	end
+	
+	return Theme
+end
+
+function Tab:Flush()
+	for Index, Connection in self.Connections do
+		Connection:Disconnect()
+	end
+
+	self.Interface:Destroy()
+	self.SideTab:Destroy()
+
+	for Index, Item in self.Content do
+		task.spawn(Item.Flush, Item)
+	end
+end
+
+function Tab:CreateButton(Data: ButtonConfigurator)
+	local Button = Class(Data, Button)
+
+	Button.Window = self.Window
+	Button.Tab = self
+
+	Button.Interface = self.Window.Interface.Examples.Button:Clone()
+	Button.Mainframe = self.Window.Interface.Examples.Mainframe:Clone()
+
+	Button.Connections = {}
+	Button.Status = (Button.Status == nil and true) or Button.Status
+
+	Button:Setup()
+
+	return Button
+end
+
+function Button:Setup()
+	self.Interface.Text.Text = self.Name
+	self.Interface.Name = self.Name
+
+	self.Interface.Visible = true
+	self.Interface.Parent = self.Mainframe
+
+	self.Mainframe.Parent = self.Tab.Interface.Content
+	self.Mainframe.Name = self.Interface.Name
+
+	self.Mainframe.Visible = true
+
+	table.insert(self.Connections, self.Mainframe.MouseEnter:Connect(function()
+		if not self.Status then return end
+
+		TweenService:Create(self.Mainframe, TweenInfo.new(0.1), {
+			["BackgroundColor3"] = CONSTANTS.HOVER_COLOR
+		}):Play()
+	end))
+
+	table.insert(self.Connections, self.Mainframe.MouseLeave:Connect(function()
+		if not self.Status then return end
+
+		TweenService:Create(self.Mainframe, TweenInfo.new(0.1), {
+			["BackgroundColor3"] = CONSTANTS.BUTTON_COLOR
+		}):Play()
+	end))
+
+	table.insert(self.Connections, self.Interface.MouseButton1Down:Connect(function()
+		if not self.Status then return end
+
+		TweenService:Create(self.Interface, TweenInfo.new(0.1), {
+			["Transparency"] = 0.95
+		}):Play()
+	end))
+
+	table.insert(self.Connections, self.Interface.MouseButton1Up:Connect(function()
+		if not self.Status then return end
+
+		TweenService:Create(self.Interface, TweenInfo.new(0.1), {
+			["Transparency"] = 1
+		}):Play()
+	end))
+	
+	table.insert(self.Connections, self.Interface.MouseButton1Click:Connect(function()
+		if not self.Status then return end
+		
+		self:Click()
+	end))
+end
+
+function Button:Flush()
+	for Index, Connection in self.Connections do
+		Connection:Disconnect()
+	end
+
+	self.Interface:Destroy()
+	self.Mainframe:Destroy()
+end
+
+function Button:Update()
+	TweenService:Create(self.Interface.Text, TweenInfo.new(0.1), {
+		["TextColor3"] = not self.Status and CONSTANTS.DISABLED_TEXT_COLOR or CONSTANTS.TEXT_COLOR
+	}):Play()
+end
+
+function Button:SetStatus(Status: boolean)
+	self.Status = Status
+	self:Update()
+end
+
+function Button:Click()
+	task.spawn(self.Callback)
+end
+
+function Tab:CreateToggle(Data: ToggleConfigurator)
+	local Toggle = Class(Data, Toggle)
+
+	Toggle.Window = self.Window
+	Toggle.Tab = self
+
+	Toggle.Interface = self.Window.Interface.Examples.Toggle:Clone()
+	Toggle.Mainframe = self.Window.Interface.Examples.Mainframe:Clone()
+
+	Toggle.Connections = {}
+	Toggle.Status = (Toggle.Status == nil and true) or Toggle.Status
+	
+	--Toggle.Value = Toggle.Flag and (self.Window.Objects[Toggle.Flag] ~= nil and self.Window.Objects[Toggle.Flag]) or (Toggle.Value == nil and false) or Toggle.Value
+
+	Toggle:Setup()
+
+	self.Window.Features[Toggle.Flag] = Toggle
+
+	return Toggle
+end
+
+function Toggle:Setup()
+	self.Interface.Text.Text = self.Name
+	self.Interface.Name = self.Name
+
+	self.Interface.Visible = true
+	self.Interface.Parent = self.Mainframe
+
+	self.Mainframe.Parent = self.Tab.Interface.Content
+	self.Mainframe.Name = self.Interface.Name
+
+	self.Mainframe.Visible = true
+
+	table.insert(self.Connections, self.Interface.Toggle.MouseButton1Click:Connect(function()
+		if not self.Status then return end
+
+		self:Set(not self:Get())
+	end))
+
+	self:Update()
+end
+
+function Toggle:Flush()
+	for Index, Connection in self.Connections do
+		Connection:Disconnect()
+	end
+
+	self.Interface:Destroy()
+	self.Mainframe:Destroy()
+end
+
+function Toggle:Update()
+	TweenService:Create(self.Interface.Text, TweenInfo.new(0.1), {
+		["TextColor3"] = not self.Status and CONSTANTS.DISABLED_TEXT_COLOR or CONSTANTS.TEXT_COLOR
+	}):Play()
+
+	TweenService:Create(self.Interface.Toggle.Switch.Value, TweenInfo.new(0.1), {
+		["Position"] = self:Get() and UDim2.new(0.75, 0, 0.5, 0) or  UDim2.new(0.25, 0, 0.5, 0),
+		["BackgroundColor3"] = self:Get() and CONSTANTS.TOGGLE_COLOR or CONSTANTS.DISABLED_TEXT_COLOR
+	}):Play()
+end
+
+function Toggle:Get()
+	return self.Value
+end
+
+function Toggle:Set(Value: boolean)
+	self.Value = Value
+	self:Update()
+
+	if self.Window.AutoSave then
+		self.Window:Save()
+	end
+
+	task.spawn(self.Callback, self:Get())
+end
+
+function Toggle:SetStatus(Status: boolean)
+	self.Status = Status
+	self:Update()
+end
+
+function Tab:CreateInput(Data: InputConfigurator)
+	local Input = Class(Data, Input)
+
+	Input.Window = self.Window
+	Input.Tab = self
+
+	Input.Interface = self.Window.Interface.Examples.Input:Clone()
+	Input.Mainframe = self.Window.Interface.Examples.Mainframe:Clone()
+
+	Input.Connections = {}
+	Input.Status = (Input.Status == nil and true) or Input.Status
+
+	Input.Confirm = (Input.Confirm == nil and false) or Input.Confirm
+	Input.Numeric = (Input.Numeric == nil and false) or Input.Numeric
+
+	--Input.Value = Input.Flag and (self.Window.Objects[Input.Flag] ~= nil and self.Window.Objects[Input.Flag]) or (Input.Value == nil and false) or Input.Value
+
+	Input:Setup()
+
+	self.Window.Features[Input.Flag] = Input
+
+	return Input
+end
+
+function Input:Setup()
+	self.Interface.Text.Text = self.Name
+	self.Interface.Name = self.Name
+
+	self.Interface.Visible = true
+	self.Interface.Parent = self.Mainframe
+
+	self.Mainframe.Parent = self.Tab.Interface.Content
+	self.Mainframe.Name = self.Interface.Name
+
+	self.Mainframe.Visible = true
+
+	table.insert(self.Connections, self.Interface.Input.FocusLost:Connect(function(Confirmed)
+		if not self.Status then return end
+		if self.Confirm and not Confirmed then
+			self.Interface.Input.Text = "";
+
+			return 
+		end
+
+		self:Set(not self.Numeric and self.Interface.Input.Text or tonumber(self.Interface.Input.Text))
+	end))
+	
+	table.insert(self.Connections, self.Interface.Input:GetPropertyChangedSignal("Text"):Connect(function()
+		self:UpdateUI()
+	end))
+
+	self:Update()
+end
+
+function Input:Flush()
+	for Index, Connection in self.Connections do
+		Connection:Disconnect()
+	end
+
+	self.Interface:Destroy()
+	self.Mainframe:Destroy()
+end
+
+function Input:UpdateUI()
+	TweenService:Create(self.Interface.Text, TweenInfo.new(0.1), {
+		["TextColor3"] = not self.Status and CONSTANTS.DISABLED_TEXT_COLOR or CONSTANTS.TEXT_COLOR
+	}):Play()
+
+	TweenService:Create(self.Interface.Input, TweenInfo.new(0.1), {
+		["TextColor3"] = not self.Status and CONSTANTS.DISABLED_TEXT_COLOR or CONSTANTS.TEXT_COLOR
+	}):Play()
+	
+	local Parameters = Instance.new("GetTextBoundsParams");
+
+	Parameters.Text = self.Interface.Input.Text
+	Parameters.Font = self.Interface.Input.FontFace
+	Parameters.Size = self.Interface.Input.TextSize
+
+	local Vector = TextService:GetTextBoundsAsync(Parameters);
+
+	TweenService:Create(self.Interface.Input, TweenInfo.new(0.1, Enum.EasingStyle.Sine), {
+		["Size"] = UDim2.new(0, math.clamp(Vector.X + 25, 50, (self.Interface.Parent.Parent.AbsoluteSize.X - self.Interface.Text.TextBounds.X) - 30), 1, -6)
+	}):Play()
+end
+
+function Input:Update()
+	self:UpdateUI()
+	self.Interface.Input.Text = self:Get() and self:Get() or ""
+end
+
+function Input:Get()
+	return self.Value
+end
+
+function Input:Set(Value: boolean)
+	self.Value = Value
+	self:Update()
+
+	if self.Window.AutoSave then
+		self.Window:Save()
+	end
+
+	task.spawn(self.Callback, self:Get())
+end
+
+function Input:SetStatus(Status: boolean)
+	self.Status = Status
+	self:Update()
+end
+
+function Tab:CreateSlider(Data: SliderConfigurator)
+	local Slider = Class(Data, Slider)
+
+	Slider.Window = self.Window
+	Slider.Tab = self
+
+	Slider.Interface = self.Window.Interface.Examples.Slider:Clone()
+	Slider.Mainframe = self.Window.Interface.Examples.Mainframe:Clone()
+
+	Slider.Connections = {}
+	Slider.Status = (Slider.Status == nil and true) or Slider.Status
+	
+	Slider.Range = (Slider.Range == nil and {0, 10}) or Slider.Range
+	Slider.Increment = (Slider.Range == nil and 1) or Slider.Increment
+
+	--Slider.Value = Slider.Flag and (self.Window.Objects[Slider.Flag] ~= nil and self.Window.Objects[Slider.Flag]) or Slider.Value
+	
+	Slider.Loop = nil;
+
+	if math.min((Slider.Range[2] - Slider.Range[1]) % Slider.Increment, Slider.Increment - ((Slider.Range[2] - Slider.Range[1]) % Slider.Increment)) > 0.001 then
+		Slider:Flush()
+		
+		error("Slider range is not divisible by increment")
+	end
+	
+	if math.min(Slider.Value % Slider.Increment, Slider.Increment - (Slider.Value % Slider.Increment)) > 0.001 then
+		Slider:Flush()
+
+		error("Slider value is not divisible by increment")
+	end
+
+	Slider:Setup()
+
+	self.Window.Features[Slider.Flag] = Slider
+
+	return Slider
+end
+
+function Slider:Setup()
+	self.Interface.Text.Text = self.Name
+	self.Interface.Name = self.Name
+
+	self.Interface.Visible = true
+	self.Interface.Parent = self.Mainframe
+
+	self.Mainframe.Parent = self.Tab.Interface.Content
+	self.Mainframe.Name = self.Interface.Name
+	
+	self.Mainframe.Visible = true
+	
+	local Dragging = false
+	table.insert(self.Connections, self.Interface.Drag.InputBegan:Connect(function(Input, Processed)
+		if not self.Status then return end
+		
+		if Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch then
+			self.Interface.Slider.Size = UDim2.fromOffset(200, 8)
+			
+			Dragging = true
+			
+			self.Window.Drag.CanDrag = false
+			self.Loop = RunService.RenderStepped:Connect(function()
+				if not self.Status then return end
+				
+				if Dragging then
+					self:Step();
+				end
+			end)
+			
+			table.insert(self.Connections, self.Loop)
+		end
+	end))
+	
+	table.insert(self.Connections, self.Interface.Drag.InputEnded:Connect(function(Input)
+		if not self.Status then return end
+		
+		if Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch and Dragging then
+			self.Interface.Slider.Size = UDim2.fromOffset(200, 6)
+			
+			Dragging = false
+			
+			self.Window.Drag.CanDrag = true
+			
+			if self.Loop and self.Disconnect then
+				self.Loop:Disconnect()
+				self.Loop = nil
+			end
+		end
+	end))
+	
+	self:Update(true)
+end
+
+function Slider:Update(Instant: boolean)
+	TweenService:Create(self.Interface.Slider.Value, TweenInfo.new(0.1), {
+		["BackgroundColor3"] = self.Status and CONSTANTS.SLIDER_COLOR or CONSTANTS.DISABLED_SLIDER_COLOR
+	}):Play()
+	
+	TweenService:Create(self.Interface.Text, TweenInfo.new(0.1), {
+		["TextColor3"] = self.Status and CONSTANTS.TEXT_COLOR or CONSTANTS.DISABLED_TEXT_COLOR
+	}):Play()
+	
+	TweenService:Create(self.Interface.Value, TweenInfo.new(0.1), {
+		["TextColor3"] = self.Status and CONSTANTS.TEXT_COLOR or CONSTANTS.DISABLED_TEXT_COLOR
+	}):Play()
+	
+	if not self.Status then
+		self.Interface.Slider.Size = UDim2.fromOffset(200, 6)
+	end
+
+	if not Instant then
+		TweenService:Create(self.Interface.Slider.Value, TweenInfo.new(0.1), {
+			["Size"] = UDim2.new(0, self:CalculatePosition(self:Get()), 1, 0)
+		}):Play()
+	else
+		self.Interface.Slider.Value.Size = UDim2.new(0, self:CalculatePosition(self:Get()), 1, 0)
+	end
+	
+	self.Interface.Value.Text = self:Get() .. "/" .. self.Range[2]
+end
+
+function Slider:SetStatus(Status: boolean)
+	if not Status then
+		if self.Loop and self.Disconnect then
+			self.Loop:Disconnect()
+			self.Loop = nil
+		end
+	end
+	
+	self.Status = Status
+	self:Update()
+end
+
+function Slider:Flush()
+	for Index, Connection in self.Connections do
+		Connection:Disconnect()
+	end
+
+	self.Interface:Destroy()
+	self.Mainframe:Destroy()
+end
+
+function Slider:CalculateValue(X: number)
+	local Minimum = self.Range[1]
+	local Maximum = self.Range[2]
+	local Increment = self.Increment
+
+	local Gaps = Maximum - Minimum
+	local Gap = self.Interface.Slider.AbsoluteSize.X / Gaps
+
+	local Raw = Minimum + (X / Gap)
+	local Closest = math.floor((Raw - Minimum) / Increment + 0.5) * Increment + Minimum
+
+	local IncrementStr = string.format("%.10f", Increment):gsub("0+$", "")
+	local Decimals = IncrementStr:match("%.(%d*)$")
+	Decimals = Decimals and #Decimals or 0
+	local Rounded = tonumber(string.format("%." .. Decimals .. "f", Closest))
+
+	return math.clamp(Rounded, Minimum, Maximum)
+end
+
+
+function Slider:CalculatePosition(Value: number)
+	local Minimum = self.Range[1]
+	local Maximum = self.Range[2]
+
+	local Gaps = Maximum - Minimum
+	local Gap = self.Interface.Slider.AbsoluteSize.X / Gaps
+
+	Value = math.clamp(Value, Minimum, Maximum)
+
+	local SliderPosition = (Value - Minimum) * Gap
+
+	return SliderPosition
+end
+
+function Slider:Get()
+	return self.Value
+end
+
+function Slider:Set(Value)
+	local OldValue = self:Get();
+	
+	self.Value = Value
+	self:Update()
+
+	if self.Window.AutoSave then
+		self.Window:Save()
+	end
+	
+	if self.FireOnStepped or (not (self.FireOnStepped) and self:Get() ~= OldValue) then
+		task.spawn(self.Callback, self:Get())
+	end
+end
+
+function Slider:Step()
+	local SliderPosition = Mouse.X - self.Interface.Slider.AbsolutePosition.X;
+	local Value = self:CalculateValue(SliderPosition);
+	
+	self:Set(Value)
+end
+
+function Tab:CreateDropdown(Data: DropdownConfigurator)
+	local Dropdown = Class(Data, Dropdown)
+
+	Dropdown.Window = self.Window
+	Dropdown.Tab = self
+
+	Dropdown.Interface = self.Window.Interface.Examples.Dropdown:Clone()
+	Dropdown.Mainframe = self.Window.Interface.Examples.Mainframe:Clone()
+
+	Dropdown.Connections = {}
+	Dropdown.OptionConnections = {}
+	
+	Dropdown.Status = (Dropdown.Status == nil and true) or Dropdown.Status
+	
+	Dropdown.Multiselect = (Dropdown.Multiselect == nil and false) or Dropdown.Multiselect
+	Dropdown.Selected = {}
+
+	--Dropdown.Value = Dropdown.Flag and (self.Window.Objects[Dropdown.Flag] ~= nil and self.Window.Objects[Dropdown.Flag]) or Dropdown.Value
+	
+	if not Dropdown.Options then
+		error("Dropdown is missing options")
+	end
+	
+	local Cache = {};
+	
+	for Index, Option in Dropdown.Options do
+		if Cache[Option] then
+			Dropdown:Flush()
+			
+			error("Dropdown has duplicate options")
+		end
+		
+		Cache[Option] = true
+	end
+	
+	Dropdown:Setup()
+
+	self.Window.Features[Dropdown.Flag] = Dropdown
+
+	return Dropdown
+end
+
+function Dropdown:Setup()
+	self.Interface.Text.Text = self.Name
+	self.Interface.Name = self.Name
+
+	self.Interface.Arrow.Image = GetCustomAsset("biggiehub/assets/arrow.png")
+
+	self.Interface.Visible = true
+	self.Interface.Parent = self.Mainframe
+
+	self.Mainframe.Parent = self.Tab.Interface.Content
+	self.Mainframe.Name = self.Interface.Name
+
+	self.Mainframe.Visible = true
+	
+	self:Refresh()
+	
+	table.insert(self.Connections, self.Interface.MouseButton1Click:Connect(function()
+		if not self.Interface.Options.Visible then
+			self.Interface.Options.Visible = true
+			
+			TweenService:Create(self.Interface.Arrow, TweenInfo.new(0.1), {
+				["Rotation"] = -90
+			}):Play()
+
+			TweenService:Create(self.Interface.Options, TweenInfo.new(0.1), {
+				["Size"] = UDim2.new(1, 0, 0, 120)
+			}):Play()
+		else
+			TweenService:Create(self.Interface.Arrow, TweenInfo.new(0.1), {
+				["Rotation"] = 0
+			}):Play()
+
+			TweenService:Create(self.Interface.Options, TweenInfo.new(0.1), {
+				["Size"] = UDim2.new(1, 0, 0, 0)
+			}):Play()
+			
+			task.delay(0.1, function()
+				self.Interface.Options.Visible = false
+			end)
+		end
+	end))
+end
+
+function Dropdown:Flush()
+	for Index, Connection in self.Connections do
+		Connection:Disconnect()
+	end
+	
+	for Index, Connection in self.OptionConnections do
+		Connection:Disconnect()
+	end
+
+	self.Interface:Destroy()
+	self.Mainframe:Destroy()
+end
+
+function Dropdown:Update()
+	if self.Window.AutoSave then
+		self.Window:Save()
+	end
+
+	TweenService:Create(self.Interface.Text, TweenInfo.new(0.1), {
+		["TextColor3"] = self.Status and CONSTANTS.TEXT_COLOR or CONSTANTS.DISABLED_TEXT_COLOR
+	}):Play()
+	
+	for Index, Option in self.Interface.Options.Content:GetChildren() do
+		if not table.find(self.Options, Option.Name) then
+			continue
+		end
+		
+		if table.find(self.Selected, Option.Name) then
+			TweenService:Create(Option, TweenInfo.new(0.1), {
+				["BackgroundColor3"] = CONSTANTS.SELECTED_OPTION_COLOR
+			}):Play()
+		else
+			TweenService:Create(Option, TweenInfo.new(0.1), {
+				["BackgroundColor3"] = CONSTANTS.OPTION_COLOR
+			}):Play()
+		end
+	end
+end
+
+function Dropdown:Refresh()
+	for Index, Option in self.Interface.Options.Content:GetChildren() do
+		if not table.find(self.Options, Option.Name) then
+			continue
+		end
+		
+		Option:Destroy()
+	end
+	
+	self.Selected = {}
+	self:Update()
+	
+	for Index, Connection in self.OptionConnections do
+		Connection:Disconnect()
+	end
+	
+	for Index, Option in self.Options do
+		local Interface = self.Window.Interface.Examples.Option:Clone()
+
+		Interface.Parent = self.Interface.Options.Content
+		Interface.Text.Text = tostring(Option)
+		Interface.Name = tostring(Option)
+		Interface.Visible = true
+
+		table.insert(self.OptionConnections, Interface.MouseEnter:Connect(function()
+			if table.find(self.Selected, Option) then
+				return
+			end
+
+			TweenService:Create(Interface, TweenInfo.new(0.1), {
+				["BackgroundColor3"] = CONSTANTS.HOVER_OPTION_COLOR
+			}):Play()
+		end))
+
+		table.insert(self.OptionConnections, Interface.MouseLeave:Connect(function()
+			if table.find(self.Selected, Option) then
+				return
+			end
+
+			TweenService:Create(Interface, TweenInfo.new(0.1), {
+				["BackgroundColor3"] = CONSTANTS.OPTION_COLOR
+			}):Play()
+		end))
+
+		table.insert(self.OptionConnections, Interface.MouseButton1Click:Connect(function()
+			self:Toggle({Option})
+		end))
+	end
+end
+
+function Dropdown:UpdateOptions(Options: table)
+	self.Options = Options
+	self:Refresh()
+end
+
+function Dropdown:SetStatus(Status: boolean)
+	self.Status = Status
+	self:Update()
+end
+
+function Dropdown:IsSelected(Option: string)
+	return table.find(self.Selected, Option)
+end
+
+function Dropdown:Select(Options: table)
+	for Index, Option in Options do
+		if not table.find(self.Options, Option) then
+			continue
+		end
+		
+		if self:IsSelected(Option) then
+			table.remove(self.Selected, self:IsSelected(Option))
+		end
+		
+		table.insert(self.Selected, Option)
+	end
+	
+	if not self.Multiselect then
+		while #self.Selected > 1 do
+			table.remove(self.Selected, 1)
+		end
+	end
+	
+	self:Update()
+    task.spawn(self.Callback, self.Selected)
+end
+
+function Dropdown:Toggle(Options: table)
+	for Index, Option in Options do
+		if not table.find(self.Options, Option) then
+			continue
+		end
+
+		if self:IsSelected(Option) then
+			table.remove(self.Selected, self:IsSelected(Option))
+		else
+			table.insert(self.Selected, Option)
+		end
+	end
+	
+	if not self.Multiselect then
+		while #self.Selected > 1 do
+			table.remove(self.Selected, 1)
+		end
+	end
+	
+	self:Update()
+	task.spawn(self.Callback, self.Selected)
+end
+
+function Dropdown:Get()
+	return self.Selected
+end
+
+function Dropdown:Set(Value)
+	self.Selected = Value
+	self:Update()
+    
+    task.spawn(self.Callback, self.Selected)
+end
+
+function Tab:CreatePicker(Data: PickerConfigurator)
+	local Picker = Class(Data, Picker)
+
+	Picker.Window = self.Window
+	Picker.Tab = self
+
+	Picker.Interface = self.Window.Interface.Examples.Color:Clone()
+	Picker.Mainframe = self.Window.Interface.Examples.Mainframe:Clone()
+
+	Picker.Connections = {}
+	Picker.OptionConnections = {}
+
+	Picker.Status = (Picker.Status == nil and true) or Picker.Status
+	Picker.Value = (Picker.Value == nil and {Saturation = 1, Brightness = 1, Hue = 0}) or Picker.Value
+	
+	Picker.Loop = nil
+	Picker.Dragging = CONSTANTS.DRAGGING_NIL
+
+	Picker:Setup()
+
+	self.Window.Features[Picker.Flag] = Picker
+
+	return Picker
+end
+
+function Picker:Setup()
+	self.Interface.Text.Text = self.Name
+	self.Interface.Name = self.Name
+
+	self.Interface.Visible = true
+	self.Interface.Parent = self.Mainframe
+
+	self.Mainframe.Parent = self.Tab.Interface.Content
+	self.Mainframe.Name = self.Interface.Name
+
+	self.Mainframe.Visible = true
+	
+	local Debounce;
+	
+	table.insert(self.Connections, self.Interface.Picker.MouseButton1Click:Connect(function()
+		if Debounce then return end
+		
+		if self.Loop then
+			self.Loop:Disconnect()
+			self.Loop = nil
+		end
+		
+		if self.Picker then
+			self.Picker:Destroy()
+			self.Picker = nil
+			
+			return
+		end
+		
+		if not self.Status then return end
+		
+		Debounce = true
+		
+		self.Picker = self.Window.Interface.Examples.Picker:Clone()
+		self.Picker.Parent = self.Window.Interface
+		self.Picker.Visible = true
+		
+		self.Drag = Module:Drag({
+			["Interface"] = self.Picker,
+			["Speed"] = 0,
+			["CanDrag"] = true
+		})
+		
+		--> Saturation
+		
+		self.Loop = RunService.RenderStepped:Connect(function()
+			if self.Dragging == CONSTANTS.DRAGGING_SATURATION_BRIGHTNESS then
+				local Bounds = GetBounds(self.Picker.SelectionFrame)
+				local MouseX, MouseY = math.clamp(Mouse.X - Bounds.Left, 0, Bounds.Right - Bounds.Left), math.clamp(Mouse.Y - Bounds.Top, 0, Bounds.Bottom - Bounds.Top)
+				
+				local Saturation, Brightness = self:CalculateColor(MouseX, MouseY)
+				
+				self.Value.Saturation = Saturation
+				self.Value.Brightness = Brightness
+				self:Update()
+
+				task.spawn(self.Callback, self:Get())
+			elseif self.Dragging == CONSTANTS.DRAGGING_HUE then
+				local Bounds = GetBounds(self.Picker.Hue)
+				local MouseX = math.clamp(Mouse.X - Bounds.Left, 0, Bounds.Right - Bounds.Left)
+				
+				local Hue = MouseX / (Bounds.Right - Bounds.Left)
+
+				self.Value.Hue = Hue
+				self:Update()
+
+				task.spawn(self.Callback, self:Get())
+			end
+		end)
+
+		table.insert(self.Connections, self.Loop)
+		table.insert(self.Connections, self.Picker.Box.Saturation.InputBegan:Connect(function(Input)
+			if Input.UserInputType == Enum.UserInputType.MouseButton1 then
+				self.Drag.CanDrag = false
+				self.Dragging = CONSTANTS.DRAGGING_SATURATION_BRIGHTNESS
+			end 
+		end))
+		
+		table.insert(self.Connections, self.Picker.Box.Saturation.InputEnded:Connect(function(Input)
+			if Input.UserInputType == Enum.UserInputType.MouseButton1 then
+				self.Drag.CanDrag = true
+				self.Dragging = CONSTANTS.DRAGGING_NIL
+			end 
+		end))
+		
+		--> Hue
+		
+		table.insert(self.Connections, self.Picker.Hue.InputBegan:Connect(function(Input)
+			if Input.UserInputType == Enum.UserInputType.MouseButton1 then
+				self.Drag.CanDrag = false
+				self.Dragging = CONSTANTS.DRAGGING_HUE
+			end 
+		end))
+
+		table.insert(self.Connections, self.Picker.Hue.InputEnded:Connect(function(Input)
+			if Input.UserInputType == Enum.UserInputType.MouseButton1 then
+				self.Drag.CanDrag = true
+				self.Dragging = CONSTANTS.DRAGGING_NIL
+			end
+
+			if self.Window.AutoSave then
+				self.Window:Save()
+			end
+		end))
+
+		self:Update(true)
+		Debounce = false
+	end))
+
+	self:Update()
+end
+
+function Picker:Update(Instant: boolean?)
+	local Color = self:Get()
+	self.Interface.Color.Text = `R: {math.floor(Color.R * 255)}  G: {math.floor(Color.G * 255)}  B: {math.floor(Color.B * 255)}`
+	
+	TweenService:Create(self.Interface.Text, TweenInfo.new(0.1), {
+		["TextColor3"] = self.Status and CONSTANTS.TEXT_COLOR or CONSTANTS.DISABLED_TEXT_COLOR
+	}):Play()
+	
+	TweenService:Create(self.Interface.Color, TweenInfo.new(0.1), {
+		["TextColor3"] = self.Status and CONSTANTS.TEXT_COLOR or CONSTANTS.DISABLED_TEXT_COLOR
+	}):Play()
+	
+	TweenService:Create(self.Interface.Picker, TweenInfo.new(Instant and 0 or 0.1), {
+		["BackgroundColor3"] = self:Get()
+	}):Play()
+	
+	if self.Picker then
+		local Hue, Saturation, Brightness = self.Value.Hue, self.Value.Saturation, self.Value.Brightness
+		local X, Y, HueX = self:CalculatePosition(Saturation, Brightness, Hue)
+		
+		TweenService:Create(self.Picker.SelectionFrame.Selection, TweenInfo.new(Instant and 0 or 0.1), {
+			["Position"] = UDim2.new(0, X, 0, Y)
+		}):Play()
+		
+		TweenService:Create(self.Picker.Hue.Selection, TweenInfo.new(Instant and 0 or 0.1), {
+			["Position"] = UDim2.new(0, HueX, 0.5, 0)
+		}):Play()
+
+		TweenService:Create(self.Picker.Box.Color, TweenInfo.new(Instant and 0 or 0.1), {
+			["BackgroundColor3"] = self:Get()
+		}):Play()
+		
+		self.Picker.Box.Saturation.Value.Color = ColorSequence.new({ColorSequenceKeypoint.new(0, Color3.new(1, 1, 1)), ColorSequenceKeypoint.new(1, Color3.fromHSV(self.Value.Hue, 1, 1))})
+	end
+end
+
+function Picker:CalculateColor(ColorX, ColorY)
+	local Saturation = ((1 / self.Picker.SelectionFrame.Size.X.Offset) * ColorX)
+	local Brightness = 1 - ((1 / self.Picker.SelectionFrame.Size.Y.Offset) * ColorY)
+	
+	return Saturation, Brightness
+end
+
+function Picker:CalculatePosition(Saturation, Brightness, Hue)
+	local Bounds = GetBounds(self.Picker.Hue)
+	
+	local ColorX = Saturation * self.Picker.SelectionFrame.Size.X.Offset
+	local ColorY = (1 - Brightness) * self.Picker.SelectionFrame.Size.Y.Offset
+	
+	local HueX = Hue * (Bounds.Right - Bounds.Left)
+
+	return ColorX, ColorY, HueX
+end
+
+function Picker:SetStatus(Status: boolean)
+	self.Status = Status
+	self:Update()
+end
+
+function Picker:Get()
+	return Color3.fromHSV(self.Value.Hue, self.Value.Saturation, self.Value.Brightness)
+end
+
+function Picker:Set(Value: Color3)
+	local Hue, Saturation, Brightness = Value:ToHSV()
+	
+	self.Value = {
+		Hue = Hue,
+		Saturation = Saturation,
+		Brightness = Brightness
+	};
+	
+	self:Update()
+end
+
+function Tab:CreateLabel(Data: LabelConfigurator)
+	local Label = Class(Data, Label)
+
+	Label.Window = self.Window
+	Label.Tab = self
+
+	Label.Interface = self.Window.Interface.Examples.Label:Clone()
+	
+	Label:Setup()
+	
+	return Label
+end
+
+function Label:Setup()
+	self.Interface.Name = self.Name
+	self.Interface.Text.Text = self.Name
+	
+	self.Interface.Parent = self.Tab.Interface.Content
+	self.Interface.Visible = true
+end
+
+function Tab:CreateSection(Data: SectionConfigurator)
+	local Section = Class(Data, Section)
+
+	Section.Window = self.Window
+	Section.Tab = self
+
+	Section.Interface = self.Window.Interface.Examples.Section:Clone()
+	
+	Section:Setup()
+	
+	return Section
+end
+
+function Section:Setup()
+	self.Interface.Name = self.Name
+	self.Interface.Text.Text = self.Name
+	
+	self.Interface.Parent = self.Tab.Interface.Content
+	self.Interface.Visible = true
+end
+
+function Tab:CreateDivider(Data: DividerConfigurator)
+	local Divider = Class(Data or {}, Divider)
+
+	Divider.Window = self.Window
+	Divider.Tab = self
+
+	Divider.Interface = self.Window.Interface.Examples.Divider:Clone()
+	
+	Divider:Setup()
+	
+	return Divider
+end
+
+function Divider:Setup()
+	if self.Name then
+		self.Interface.Name = self.Name
+		self.Interface.Text.Text = self.Name
+	end
+	
+	self.Interface.Parent = self.Tab.Interface.Content
+	self.Interface.Visible = true
+end
+
+return Library
