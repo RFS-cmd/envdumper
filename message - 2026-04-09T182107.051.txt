@@ -1,22 +1,3 @@
---[[
-    COPYRIGHT © 2026 LIGHTWORK STUDIOS. ALL RIGHTS RESERVED.
-    
-    WARNING: THIS CODE IS PROPRIETARY PROPERTY.
-    Unauthorized use, distribution, or modification of this script is strictly 
-    prohibited. LIGHTWORK STUDIOS reserves the right to take legal action, 
-    including DMCA takedown requests and litigation for copyright infringement, 
-    against any individual or entity found using this code without permission.
-
-    Seriously, if you got this far, do not try anything. We have direct ties 
-    with Luarmor and Luraph; any attempts to circumvent this protection will 
-    be logged, reported, and met with an immediate blacklist and legal action. 
-    YOU can be sued for up to $150,000. Don't be a retarded internet gangster that is dying for attention.
-    We don't care if you have this code, this is simply a UI Library. We care that 
-    you have or is trying to reverse Luarmor + Luraph. Spreading this file if you 
-    have it will also put you in legal trouble. Seriously.
-
-   (even a simple http spy will put u in risk, this is ur only warning)
---]]
 --> Services
 
 local NoReference = cloneref or function(x)
@@ -301,15 +282,17 @@ function Library:CreateWindow(Data: WindowConfigurator)
 	Window.CurrentTab = nil
 	Window.Tabs = {}
 
-	Window.MobileButton = Create("TextButton", {
-		Name = "MobileButton",
-		Parent = Window.Interface,
-		Size = UDim2.new(0, 20, 0, 20),
-		Text = "Biggie Hub Show/Hide",
-		TextWrapped = true,
-		TextScaled = true,
-		Position = UDim2.new(1, -50, 1, -50)
-	})
+	if Mobile then
+		Window.MobileButton = Create("TextButton", {
+			Name = "MobileButton",
+			Parent = Window.Interface,
+			Size = UDim2.new(0, 20, 0, 20),
+			Text = "Biggie Hub Show/Hide",
+			TextWrapped = true,
+			TextScaled = true,
+			Position = UDim2.new(1, -50, 1, -50)
+		})
+	end
 
 	Window.Initialized = false
 
@@ -392,6 +375,33 @@ function Window:Setup()
 	end))
 
 	self.Snowflakes = {}
+
+	-- Auto-apply background, protected via getcustomasset just like all other assets
+	local bgImage
+	if getcustomasset then
+		local ok, result = pcall(getcustomasset, "rbxassetid://87906311514772")
+		bgImage = (ok and result and result ~= "") and result or "rbxassetid://87906311514772"
+	else
+		bgImage = "rbxassetid://87906311514772"
+	end
+
+	local Background = Instance.new("ImageLabel")
+	Background.Name = "__Background"
+	Background.BackgroundTransparency = 1
+	Background.Image = bgImage
+	Background.Size = UDim2.new(1, 0, 1, 0)
+	Background.Position = UDim2.new(0, 0, 0, 0)
+	Background.ZIndex = 0
+	Background.ScaleType = Enum.ScaleType.Crop
+	Background.Parent = self.Interface.Main
+
+	for _, Child in self.Interface.Main:GetChildren() do
+		if Child ~= Background and Child:IsA("GuiObject") then
+			Child.ZIndex = math.max(Child.ZIndex, 1)
+		end
+	end
+
+	self.Background = Background
 end
 
 function Window:MessageBox(Data: table)
@@ -604,6 +614,31 @@ function Tab:Setup()
 	table.insert(self.Connections, self.SideTab.MouseButton1Click:Connect(function()
 		self.Window:Switch(self)
 	end))
+
+	-- Auto-apply background to every tab, protected via getcustomasset like all other assets
+	local bgImage
+	if getcustomasset then
+		local ok, result = pcall(getcustomasset, "rbxassetid://87906311514772")
+		bgImage = (ok and result and result ~= "") and result or "rbxassetid://87906311514772"
+	else
+		bgImage = "rbxassetid://87906311514772"
+	end
+
+	local TabBackground = Instance.new("ImageLabel")
+	TabBackground.Name = "__TabBackground"
+	TabBackground.BackgroundTransparency = 1
+	TabBackground.Image = bgImage
+	TabBackground.Size = UDim2.new(1, 0, 1, 0)
+	TabBackground.Position = UDim2.new(0, 0, 0, 0)
+	TabBackground.ZIndex = 0
+	TabBackground.ScaleType = Enum.ScaleType.Crop
+	TabBackground.Parent = self.Interface
+
+	for _, Child in self.Interface:GetChildren() do
+		if Child ~= TabBackground and Child:IsA("GuiObject") then
+			Child.ZIndex = math.max(Child.ZIndex, 1)
+		end
+	end
 end
 
 function Tab:SetTheme(Asset: string, Properties: table?)
