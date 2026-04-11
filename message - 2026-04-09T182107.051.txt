@@ -376,7 +376,7 @@ function Window:Setup()
 
 	self.Snowflakes = {}
 
-	-- Auto-apply background, protected via getcustomasset just like all other assets
+	-- Single unified background for the entire window, sits behind all tabs and content
 	local bgImage
 	if getcustomasset then
 		local ok, result = pcall(getcustomasset, "rbxassetid://87906311514772")
@@ -615,30 +615,6 @@ function Tab:Setup()
 		self.Window:Switch(self)
 	end))
 
-	-- Auto-apply background to every tab, protected via getcustomasset like all other assets
-	local bgImage
-	if getcustomasset then
-		local ok, result = pcall(getcustomasset, "rbxassetid://87906311514772")
-		bgImage = (ok and result and result ~= "") and result or "rbxassetid://87906311514772"
-	else
-		bgImage = "rbxassetid://87906311514772"
-	end
-
-	local TabBackground = Instance.new("ImageLabel")
-	TabBackground.Name = "__TabBackground"
-	TabBackground.BackgroundTransparency = 1
-	TabBackground.Image = bgImage
-	TabBackground.Size = UDim2.new(1, 0, 1, 0)
-	TabBackground.Position = UDim2.new(0, 0, 0, 0)
-	TabBackground.ZIndex = 0
-	TabBackground.ScaleType = Enum.ScaleType.Crop
-	TabBackground.Parent = self.Interface
-
-	for _, Child in self.Interface:GetChildren() do
-		if Child ~= TabBackground and Child:IsA("GuiObject") then
-			Child.ZIndex = math.max(Child.ZIndex, 1)
-		end
-	end
 end
 
 function Tab:SetTheme(Asset: string, Properties: table?)
@@ -700,6 +676,7 @@ function Button:Setup()
 	self.Mainframe.Name = self.Interface.Name
 
 	self.Mainframe.Visible = true
+	self.Mainframe.BackgroundTransparency = 0.4
 
 	table.insert(self.Connections, self.Mainframe.MouseEnter:Connect(function()
 		if not self.Status then return end
@@ -796,6 +773,7 @@ function Toggle:Setup()
 	self.Mainframe.Name = self.Interface.Name
 
 	self.Mainframe.Visible = true
+	self.Mainframe.BackgroundTransparency = 0.4
 
 	table.insert(self.Connections, self.Interface.Toggle.MouseButton1Click:Connect(function()
 		if not self.Status then return end
@@ -881,6 +859,7 @@ function Input:Setup()
 	self.Mainframe.Name = self.Interface.Name
 
 	self.Mainframe.Visible = true
+	self.Mainframe.BackgroundTransparency = 0.4
 
 	table.insert(self.Connections, self.Interface.Input.FocusLost:Connect(function(Confirmed)
 		if not self.Status then return end
@@ -1005,6 +984,7 @@ function Slider:Setup()
 	self.Mainframe.Name = self.Interface.Name
 	
 	self.Mainframe.Visible = true
+	self.Mainframe.BackgroundTransparency = 0.4
 	
 	local Dragging = false
 	table.insert(self.Connections, self.Interface.Drag.InputBegan:Connect(function(Input, Processed)
@@ -1212,6 +1192,7 @@ function Dropdown:Setup()
 	self.Mainframe.Name = self.Interface.Name
 
 	self.Mainframe.Visible = true
+	self.Mainframe.BackgroundTransparency = 0.4
 	
 	self:Refresh()
 	
@@ -1438,6 +1419,7 @@ function Picker:Setup()
 	self.Mainframe.Name = self.Interface.Name
 
 	self.Mainframe.Visible = true
+	self.Mainframe.BackgroundTransparency = 0.4
 	
 	local Debounce;
 	
