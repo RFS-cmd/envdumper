@@ -282,17 +282,15 @@ function Library:CreateWindow(Data: WindowConfigurator)
 	Window.CurrentTab = nil
 	Window.Tabs = {}
 
-	if Mobile then
-		Window.MobileButton = Create("TextButton", {
-			Name = "MobileButton",
-			Parent = Window.Interface,
-			Size = UDim2.new(0, 20, 0, 20),
-			Text = "Biggie Hub Show/Hide",
-			TextWrapped = true,
-			TextScaled = true,
-			Position = UDim2.new(1, -50, 1, -50)
-		})
-	end
+	Window.MobileButton = Create("TextButton", {
+		Name = "MobileButton",
+		Parent = Window.Interface,
+		Size = UDim2.new(0, 20, 0, 20),
+		Text = "Biggie Hub Show/Hide",
+		TextWrapped = true,
+		TextScaled = true,
+		Position = UDim2.new(1, -50, 1, -50)
+	})
 
 	Window.Initialized = false
 
@@ -375,33 +373,6 @@ function Window:Setup()
 	end))
 
 	self.Snowflakes = {}
-
-	-- Auto-apply background, protected via getcustomasset just like all other assets
-	local bgImage
-	if getcustomasset then
-		local ok, result = pcall(getcustomasset, "rbxassetid://87906311514772")
-		bgImage = (ok and result and result ~= "") and result or "rbxassetid://87906311514772"
-	else
-		bgImage = "rbxassetid://87906311514772"
-	end
-
-	local Background = Instance.new("ImageLabel")
-	Background.Name = "__Background"
-	Background.BackgroundTransparency = 1
-	Background.Image = bgImage
-	Background.Size = UDim2.new(1, 0, 1, 0)
-	Background.Position = UDim2.new(0, 0, 0, 0)
-	Background.ZIndex = 0
-	Background.ScaleType = Enum.ScaleType.Crop
-	Background.Parent = self.Interface.Main
-
-	for _, Child in self.Interface.Main:GetChildren() do
-		if Child ~= Background and Child:IsA("GuiObject") then
-			Child.ZIndex = math.max(Child.ZIndex, 1)
-		end
-	end
-
-	self.Background = Background
 end
 
 function Window:MessageBox(Data: table)
@@ -614,31 +585,6 @@ function Tab:Setup()
 	table.insert(self.Connections, self.SideTab.MouseButton1Click:Connect(function()
 		self.Window:Switch(self)
 	end))
-
-	-- Auto-apply background to every tab, protected via getcustomasset like all other assets
-	local bgImage
-	if getcustomasset then
-		local ok, result = pcall(getcustomasset, "rbxassetid://87906311514772")
-		bgImage = (ok and result and result ~= "") and result or "rbxassetid://87906311514772"
-	else
-		bgImage = "rbxassetid://87906311514772"
-	end
-
-	local TabBackground = Instance.new("ImageLabel")
-	TabBackground.Name = "__TabBackground"
-	TabBackground.BackgroundTransparency = 1
-	TabBackground.Image = bgImage
-	TabBackground.Size = UDim2.new(1, 0, 1, 0)
-	TabBackground.Position = UDim2.new(0, 0, 0, 0)
-	TabBackground.ZIndex = 0
-	TabBackground.ScaleType = Enum.ScaleType.Crop
-	TabBackground.Parent = self.Interface
-
-	for _, Child in self.Interface:GetChildren() do
-		if Child ~= TabBackground and Child:IsA("GuiObject") then
-			Child.ZIndex = math.max(Child.ZIndex, 1)
-		end
-	end
 end
 
 function Tab:SetTheme(Asset: string, Properties: table?)
