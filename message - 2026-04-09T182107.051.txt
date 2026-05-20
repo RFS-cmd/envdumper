@@ -87,7 +87,10 @@ function Module:Drag(Data)
 				if Input.UserInputState == Enum.UserInputState.End then
 					Dragging = false
 
-					Data.Connections.InputChanged:Disconnect()
+					if Data.Connections.InputChanged then
+						Data.Connections.InputChanged:Disconnect()
+						Data.Connections.InputChanged = nil
+					end
 				end
 			end)
 		end
@@ -122,6 +125,17 @@ local Interface = game:GetObjects("rbxassetid://86461665688191")[1]
 local LocalPlayer = NoReference(Players.LocalPlayer)
 local Mouse = NoReference(LocalPlayer:GetMouse())
 local Mobile = LocalPlayer.PlayerGui:FindFirstChild("TouchGui") and true or false
+
+-- FIX: Helper to safely get pointer position on both desktop and mobile
+local function GetPointerPosition()
+	if Mobile then
+		local TouchPositions = UserInputService:GetTouchLocations()
+		if TouchPositions and #TouchPositions > 0 then
+			return Vector2.new(TouchPositions[1].Position.X, TouchPositions[1].Position.Y)
+		end
+	end
+	return UserInputService:GetMouseLocation()
+end
 
 local CONSTANTS = {
 	KEYCODE_DEFAULT = Enum.KeyCode.RightShift,
@@ -263,6 +277,15 @@ function InBounds(Position: Vector2, Bounds: table)
 		and Position.Y >= Bounds.Top and Position.Y <= Bounds.Bottom
 end
 
+-- FIX: Safe connections flush handles both array-indexed and string-keyed connections
+local function FlushConnections(Connections: table)
+	for Index, Connection in Connections do
+		if typeof(Connection) == "RBXScriptConnection" then
+			Connection:Disconnect()
+		end
+	end
+end
+
 function Library:CreateWindow(Data: WindowConfigurator)
 	local Window = Class(Data, Window)
 	
@@ -282,19 +305,32 @@ function Library:CreateWindow(Data: WindowConfigurator)
 	Window.CurrentTab = nil
 	Window.Tabs = {}
 
-	Window.MobileButton = Create("TextButton", {
-		Name = "MobileButton",
-		Parent = Window.Interface,
-		Size = UDim2.new(0, 20, 0, 20),
-		Text = "Biggie Hub Show/Hide",
-		TextWrapped = true,
-		TextScaled = true,
-		Position = UDim2.new(1, -50, 1, -50)
-	})
+	-- FIX: Only create and show MobileButton on mobile devices
+	if Mobile then
+		Window.MobileButton = Create("TextButton", {
+			Name = "MobileButton",
+			Parent = LocalPlayer.PlayerGui,
+			Size = UDim2.new(0, 80, 0, 40),
+			Text = "Menu",
+			TextWrapped = true,
+			TextScaled = true,
+			Position = UDim2.new(1, -90, 1, -60),
+			BackgroundColor3 = Color3.fromRGB(31, 31, 31),
+			TextColor3 = Color3.fromRGB(220, 220, 220),
+			BorderSizePixel = 0,
+			ZIndex = 10,
+			Font = Enum.Font.GothamBold,
+		})
+
+		-- Round corners on the mobile button
+		local UICorner = Instance.new("UICorner")
+		UICorner.CornerRadius = UDim.new(0, 6)
+		UICorner.Parent = Window.MobileButton
+	else
+		Window.MobileButton = nil
+	end
 
 	Window.Initialized = false
-
-	--Window.Objects = isfile("biggiehub/config.json") and game:GetService("HttpService"):JSONDecode(readfile("biggiehub/config.json")) or {}
 
 	Window:Setup()
 
@@ -322,11 +358,14 @@ function Window:Setup()
 		end))
 	end
 
-	table.insert(self.Connections, UserInputService.InputBegan:Connect(function(Input, ProcessedEvent)
-		if Input.KeyCode == self.KeyCode then
-			self:Set(not self.Open)
-		end
-	end))
+	-- FIX: Only listen for KeyCode on non-mobile (keyboard not applicable on mobile)
+	if not Mobile then
+		table.insert(self.Connections, UserInputService.InputBegan:Connect(function(Input, ProcessedEvent)
+			if Input.KeyCode == self.KeyCode then
+				self:Set(not self.Open)
+			end
+		end))
+	end
 
 	table.insert(self.Connections, self.Interface.Main.Close.MouseButton1Click:Connect(function()
 		self:Set(false)
@@ -457,8 +496,13 @@ function Window:SetSnowEffect(Mode: boolean)
 end
 
 function Window:Flush()
-	for Index, Connection in self.Connections do
-		Connection:Disconnect()
+	-- FIX: Use safe FlushConnections that handles both array and string-keyed entries
+	FlushConnections(self.Connections)
+
+	-- FIX: Destroy mobile button if it exists (was created in PlayerGui)
+	if self.MobileButton then
+		self.MobileButton:Destroy()
+		self.MobileButton = nil
 	end
 
 	self.Interface:Destroy()
@@ -606,15 +650,16 @@ function Tab:SetTheme(Asset: string, Properties: table?)
 end
 
 function Tab:Flush()
-	for Index, Connection in self.Connections do
-		Connection:Disconnect()
-	end
+	FlushConnections(self.Connections)
 
 	self.Interface:Destroy()
 	self.SideTab:Destroy()
 
-	for Index, Item in self.Content do
-		task.spawn(Item.Flush, Item)
+	-- FIX: Iterate Content correctly (it's keyed by items, not numeric index)
+	for _, Item in self.Content do
+		if Item.Flush then
+			task.spawn(Item.Flush, Item)
+		end
 	end
 end
 
@@ -631,6 +676,9 @@ function Tab:CreateButton(Data: ButtonConfigurator)
 	Button.Status = (Button.Status == nil and true) or Button.Status
 
 	Button:Setup()
+
+	-- FIX: Track content so Tab:Flush can clean up
+	table.insert(self.Content, Button)
 
 	return Button
 end
@@ -687,9 +735,7 @@ function Button:Setup()
 end
 
 function Button:Flush()
-	for Index, Connection in self.Connections do
-		Connection:Disconnect()
-	end
+	FlushConnections(self.Connections)
 
 	self.Interface:Destroy()
 	self.Mainframe:Destroy()
@@ -721,12 +767,13 @@ function Tab:CreateToggle(Data: ToggleConfigurator)
 
 	Toggle.Connections = {}
 	Toggle.Status = (Toggle.Status == nil and true) or Toggle.Status
-	
-	--Toggle.Value = Toggle.Flag and (self.Window.Objects[Toggle.Flag] ~= nil and self.Window.Objects[Toggle.Flag]) or (Toggle.Value == nil and false) or Toggle.Value
 
 	Toggle:Setup()
 
 	self.Window.Features[Toggle.Flag] = Toggle
+
+	-- FIX: Track content
+	table.insert(self.Content, Toggle)
 
 	return Toggle
 end
@@ -753,9 +800,7 @@ function Toggle:Setup()
 end
 
 function Toggle:Flush()
-	for Index, Connection in self.Connections do
-		Connection:Disconnect()
-	end
+	FlushConnections(self.Connections)
 
 	self.Interface:Destroy()
 	self.Mainframe:Destroy()
@@ -807,11 +852,12 @@ function Tab:CreateInput(Data: InputConfigurator)
 	Input.Confirm = (Input.Confirm == nil and false) or Input.Confirm
 	Input.Numeric = (Input.Numeric == nil and false) or Input.Numeric
 
-	--Input.Value = Input.Flag and (self.Window.Objects[Input.Flag] ~= nil and self.Window.Objects[Input.Flag]) or (Input.Value == nil and false) or Input.Value
-
 	Input:Setup()
 
 	self.Window.Features[Input.Flag] = Input
+
+	-- FIX: Track content
+	table.insert(self.Content, Input)
 
 	return Input
 end
@@ -847,9 +893,7 @@ function Input:Setup()
 end
 
 function Input:Flush()
-	for Index, Connection in self.Connections do
-		Connection:Disconnect()
-	end
+	FlushConnections(self.Connections)
 
 	self.Interface:Destroy()
 	self.Mainframe:Destroy()
@@ -879,14 +923,15 @@ end
 
 function Input:Update()
 	self:UpdateUI()
-	self.Interface.Input.Text = self:Get() and self:Get() or ""
+	self.Interface.Input.Text = self:Get() and tostring(self:Get()) or ""
 end
 
 function Input:Get()
 	return self.Value
 end
 
-function Input:Set(Value: boolean)
+-- FIX: Corrected type annotation from boolean to string|number
+function Input:Set(Value: (string | number)?)
 	self.Value = Value
 	self:Update()
 
@@ -915,10 +960,8 @@ function Tab:CreateSlider(Data: SliderConfigurator)
 	Slider.Status = (Slider.Status == nil and true) or Slider.Status
 	
 	Slider.Range = (Slider.Range == nil and {0, 10}) or Slider.Range
-	Slider.Increment = (Slider.Range == nil and 1) or Slider.Increment
+	Slider.Increment = (Slider.Increment == nil and 1) or Slider.Increment
 
-	--Slider.Value = Slider.Flag and (self.Window.Objects[Slider.Flag] ~= nil and self.Window.Objects[Slider.Flag]) or Slider.Value
-	
 	Slider.Loop = nil;
 
 	if math.min((Slider.Range[2] - Slider.Range[1]) % Slider.Increment, Slider.Increment - ((Slider.Range[2] - Slider.Range[1]) % Slider.Increment)) > 0.001 then
@@ -936,6 +979,9 @@ function Tab:CreateSlider(Data: SliderConfigurator)
 	Slider:Setup()
 
 	self.Window.Features[Slider.Flag] = Slider
+
+	-- FIX: Track content
+	table.insert(self.Content, Slider)
 
 	return Slider
 end
@@ -977,14 +1023,15 @@ function Slider:Setup()
 	table.insert(self.Connections, self.Interface.Drag.InputEnded:Connect(function(Input)
 		if not self.Status then return end
 		
-		if Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch and Dragging then
+		if (Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch) and Dragging then
 			self.Interface.Slider.Size = UDim2.fromOffset(200, 6)
 			
 			Dragging = false
 			
 			self.Window.Drag.CanDrag = true
 			
-			if self.Loop and self.Disconnect then
+			-- FIX: Removed incorrect `self.Disconnect` check; just use self.Loop
+			if self.Loop then
 				self.Loop:Disconnect()
 				self.Loop = nil
 			end
@@ -1023,8 +1070,9 @@ function Slider:Update(Instant: boolean)
 end
 
 function Slider:SetStatus(Status: boolean)
+	-- FIX: Removed incorrect `self.Disconnect` check; just use self.Loop
 	if not Status then
-		if self.Loop and self.Disconnect then
+		if self.Loop then
 			self.Loop:Disconnect()
 			self.Loop = nil
 		end
@@ -1035,9 +1083,7 @@ function Slider:SetStatus(Status: boolean)
 end
 
 function Slider:Flush()
-	for Index, Connection in self.Connections do
-		Connection:Disconnect()
-	end
+	FlushConnections(self.Connections)
 
 	self.Interface:Destroy()
 	self.Mainframe:Destroy()
@@ -1097,8 +1143,10 @@ function Slider:Set(Value)
 end
 
 function Slider:Step()
-	local SliderPosition = Mouse.X - self.Interface.Slider.AbsolutePosition.X;
-	local Value = self:CalculateValue(SliderPosition);
+	-- FIX: Use GetPointerPosition() for mobile touch support instead of Mouse.X only
+	local PointerPos = GetPointerPosition()
+	local SliderPosition = PointerPos.X - self.Interface.Slider.AbsolutePosition.X
+	local Value = self:CalculateValue(SliderPosition)
 	
 	self:Set(Value)
 end
@@ -1120,8 +1168,6 @@ function Tab:CreateDropdown(Data: DropdownConfigurator)
 	Dropdown.Multiselect = (Dropdown.Multiselect == nil and false) or Dropdown.Multiselect
 	Dropdown.Selected = {}
 
-	--Dropdown.Value = Dropdown.Flag and (self.Window.Objects[Dropdown.Flag] ~= nil and self.Window.Objects[Dropdown.Flag]) or Dropdown.Value
-	
 	if not Dropdown.Options then
 		error("Dropdown is missing options")
 	end
@@ -1141,6 +1187,9 @@ function Tab:CreateDropdown(Data: DropdownConfigurator)
 	Dropdown:Setup()
 
 	self.Window.Features[Dropdown.Flag] = Dropdown
+
+	-- FIX: Track content
+	table.insert(self.Content, Dropdown)
 
 	return Dropdown
 end
@@ -1189,13 +1238,8 @@ function Dropdown:Setup()
 end
 
 function Dropdown:Flush()
-	for Index, Connection in self.Connections do
-		Connection:Disconnect()
-	end
-	
-	for Index, Connection in self.OptionConnections do
-		Connection:Disconnect()
-	end
+	FlushConnections(self.Connections)
+	FlushConnections(self.OptionConnections)
 
 	self.Interface:Destroy()
 	self.Mainframe:Destroy()
@@ -1370,6 +1414,9 @@ function Tab:CreatePicker(Data: PickerConfigurator)
 
 	self.Window.Features[Picker.Flag] = Picker
 
+	-- FIX: Track content
+	table.insert(self.Content, Picker)
+
 	return Picker
 end
 
@@ -1416,12 +1463,15 @@ function Picker:Setup()
 			["CanDrag"] = true
 		})
 		
-		--> Saturation
-		
+		--> Saturation & Brightness / Hue loop
+		-- FIX: Use GetPointerPosition() for mobile touch support
 		self.Loop = RunService.RenderStepped:Connect(function()
+			local PointerPos = GetPointerPosition()
+
 			if self.Dragging == CONSTANTS.DRAGGING_SATURATION_BRIGHTNESS then
 				local Bounds = GetBounds(self.Picker.SelectionFrame)
-				local MouseX, MouseY = math.clamp(Mouse.X - Bounds.Left, 0, Bounds.Right - Bounds.Left), math.clamp(Mouse.Y - Bounds.Top, 0, Bounds.Bottom - Bounds.Top)
+				local MouseX = math.clamp(PointerPos.X - Bounds.Left, 0, Bounds.Right - Bounds.Left)
+				local MouseY = math.clamp(PointerPos.Y - Bounds.Top, 0, Bounds.Bottom - Bounds.Top)
 				
 				local Saturation, Brightness = self:CalculateColor(MouseX, MouseY)
 				
@@ -1432,7 +1482,7 @@ function Picker:Setup()
 				task.spawn(self.Callback, self:Get())
 			elseif self.Dragging == CONSTANTS.DRAGGING_HUE then
 				local Bounds = GetBounds(self.Picker.Hue)
-				local MouseX = math.clamp(Mouse.X - Bounds.Left, 0, Bounds.Right - Bounds.Left)
+				local MouseX = math.clamp(PointerPos.X - Bounds.Left, 0, Bounds.Right - Bounds.Left)
 				
 				local Hue = MouseX / (Bounds.Right - Bounds.Left)
 
@@ -1445,14 +1495,14 @@ function Picker:Setup()
 
 		table.insert(self.Connections, self.Loop)
 		table.insert(self.Connections, self.Picker.Box.Saturation.InputBegan:Connect(function(Input)
-			if Input.UserInputType == Enum.UserInputType.MouseButton1 then
+			if Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch then
 				self.Drag.CanDrag = false
 				self.Dragging = CONSTANTS.DRAGGING_SATURATION_BRIGHTNESS
 			end 
 		end))
 		
 		table.insert(self.Connections, self.Picker.Box.Saturation.InputEnded:Connect(function(Input)
-			if Input.UserInputType == Enum.UserInputType.MouseButton1 then
+			if Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch then
 				self.Drag.CanDrag = true
 				self.Dragging = CONSTANTS.DRAGGING_NIL
 			end 
@@ -1461,14 +1511,14 @@ function Picker:Setup()
 		--> Hue
 		
 		table.insert(self.Connections, self.Picker.Hue.InputBegan:Connect(function(Input)
-			if Input.UserInputType == Enum.UserInputType.MouseButton1 then
+			if Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch then
 				self.Drag.CanDrag = false
 				self.Dragging = CONSTANTS.DRAGGING_HUE
 			end 
 		end))
 
 		table.insert(self.Connections, self.Picker.Hue.InputEnded:Connect(function(Input)
-			if Input.UserInputType == Enum.UserInputType.MouseButton1 then
+			if Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch then
 				self.Drag.CanDrag = true
 				self.Dragging = CONSTANTS.DRAGGING_NIL
 			end
@@ -1560,6 +1610,27 @@ function Picker:Set(Value: Color3)
 	self:Update()
 end
 
+-- FIX: Added missing Picker:Flush() — without this, Tab:Flush() would error and leak connections/instances
+function Picker:Flush()
+	-- Close the picker popup if open
+	if self.Picker then
+		self.Picker:Destroy()
+		self.Picker = nil
+	end
+
+	-- Disconnect the render loop if running
+	if self.Loop then
+		self.Loop:Disconnect()
+		self.Loop = nil
+	end
+
+	FlushConnections(self.Connections)
+	FlushConnections(self.OptionConnections)
+
+	self.Interface:Destroy()
+	self.Mainframe:Destroy()
+end
+
 function Tab:CreateLabel(Data: LabelConfigurator)
 	local Label = Class(Data, Label)
 
@@ -1569,6 +1640,9 @@ function Tab:CreateLabel(Data: LabelConfigurator)
 	Label.Interface = self.Window.Interface.Examples.Label:Clone()
 	
 	Label:Setup()
+
+	-- FIX: Track content
+	table.insert(self.Content, Label)
 	
 	return Label
 end
@@ -1581,6 +1655,11 @@ function Label:Setup()
 	self.Interface.Visible = true
 end
 
+-- FIX: Added missing Label:Flush()
+function Label:Flush()
+	self.Interface:Destroy()
+end
+
 function Tab:CreateSection(Data: SectionConfigurator)
 	local Section = Class(Data, Section)
 
@@ -1590,6 +1669,9 @@ function Tab:CreateSection(Data: SectionConfigurator)
 	Section.Interface = self.Window.Interface.Examples.Section:Clone()
 	
 	Section:Setup()
+
+	-- FIX: Track content
+	table.insert(self.Content, Section)
 	
 	return Section
 end
@@ -1602,6 +1684,11 @@ function Section:Setup()
 	self.Interface.Visible = true
 end
 
+-- FIX: Added missing Section:Flush()
+function Section:Flush()
+	self.Interface:Destroy()
+end
+
 function Tab:CreateDivider(Data: DividerConfigurator)
 	local Divider = Class(Data or {}, Divider)
 
@@ -1611,6 +1698,9 @@ function Tab:CreateDivider(Data: DividerConfigurator)
 	Divider.Interface = self.Window.Interface.Examples.Divider:Clone()
 	
 	Divider:Setup()
+
+	-- FIX: Track content
+	table.insert(self.Content, Divider)
 	
 	return Divider
 end
@@ -1623,6 +1713,11 @@ function Divider:Setup()
 	
 	self.Interface.Parent = self.Tab.Interface.Content
 	self.Interface.Visible = true
+end
+
+-- FIX: Added missing Divider:Flush()
+function Divider:Flush()
+	self.Interface:Destroy()
 end
 
 return Library
